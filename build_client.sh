@@ -13,3 +13,7 @@ echo "🔨 Running mingw32-make..."
 mingw32-make
 
 echo "🎉 Build completed successfully!"
+
+
+
+###
