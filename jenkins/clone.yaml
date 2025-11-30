@@ -1,0 +1,32 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clone') {
+            steps {
+                echo "Cloning repository..."
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/Develop']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Raghavendrareddy891/Application.git'
+                    ]]
+                ])
+            }
+        }
+
+        stage('Print Branch') {
+            steps {
+                script {
+                    echo "Current Branch: ${env.GIT_BRANCH}"
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo "Build successful!"
+            }
+        }
+    }
+}
