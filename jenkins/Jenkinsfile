@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clone') {
+            steps {
+                echo "Cloning repository and checking out 'Develop'..."
+                // Replace below URL with your repo if you prefer explicit checkout
+                git branch: 'Develop', url: 'https://github.com/Raghavendrareddy891/Application.git'
+            }
+        }
+
+        stage('Print Branch') {
+            steps {
+                script {
+                    // env.GIT_BRANCH is sometimes set by checkout; fallback to git command
+                    def branchName = env.GIT_BRANCH
+                    if (!branchName) {
+                        if (isUnix()) {
+                            branchName = sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
+                        } else {
+                            // bat returns extra lines; take last non-empty line
+                            def out = bat(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                            def lines = out.readLines().findAll{ it?.trim() }
+                            branchName = lines ? lines[-1].trim() : ''
+                        }
+                    }
+                    echo "Current branch: ${branchName}"
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo "Build successful!"
+            }
+        }
+    }
+}
