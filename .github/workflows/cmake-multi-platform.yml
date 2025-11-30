@@ -1,4 +1,4 @@
-name: CMake on multiple platforms
+name: CMake on Windows (vcpkg)
 
 on:
   push:
@@ -7,115 +7,94 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        build_type: [Release]
-        # choose C compiler (matrix entries combined with 'include' below)
-        c_compiler: [gcc, cl]
-        include:
-          - os: windows-latest
-            c_compiler: cl
-            cpp_compiler: cl
-          - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-        exclude:
-          - os: windows-latest
-            c_compiler: gcc
-          - os: ubuntu-latest
-            c_compiler: cl
+  build-windows:
+    runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set reusable strings
-      id: strings
-      shell: bash
-      run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    # ---------------------------
-    # Linux: install libsodium + libcurl (cpr requirement)
-    # ---------------------------
-    - name: Install Linux dependencies (libsodium, libcurl)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libsodium-dev libcurl4-openssl-dev build-essential pkg-config
-      shell: bash
+      # ---------------------------
+      # Install vcpkg and required packages (Windows)
+      # ---------------------------
+      - name: Install vcpkg and packages
+        shell: powershell
+        run: |
+          # clone vcpkg
+          git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          Set-Location $env:GITHUB_WORKSPACE\vcpkg
 
-    # ---------------------------
-    # Windows: install vcpkg and deps (libsodium + cpr)
-    # ---------------------------
-    - name: Install vcpkg (Windows)
-      if: runner.os == 'Windows'
-      shell: powershell
-      run: |
-        git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
-        Set-Location $env:GITHUB_WORKSPACE\vcpkg
-        .\bootstrap-vcpkg.bat
-        .\vcpkg.exe install libsodium:x64-windows cpr[x64-windows]:x64-windows
-        Write-Output "VCPKG_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          # bootstrap with metrics disabled (keeps logs cleaner)
+          .\bootstrap-vcpkg.bat -disableMetrics
 
-    # Ensure a predictable output variable on Linux (empty string)
-    - name: Set vcpkg toolchain output (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        echo "VCPKG_TOOLCHAIN_FILE=" >> "$GITHUB_OUTPUT"
-      shell: bash
+          # Correct install syntax: <package>:<triplet>
+          .\vcpkg.exe install libsodium:x64-windows cpr:x64-windows
 
-    # ---------------------------
-    # Configure CMake - Linux
-    # ---------------------------
-    - name: Configure CMake (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -S "${{ github.workspace }}"
-      shell: bash
+          # Show installed packages (helps debugging)
+          .\vcpkg.exe list
 
-    # ---------------------------
-    # Configure CMake - Windows (use vcpkg toolchain if present)
-    # ---------------------------
-    - name: Configure CMake (Windows + vcpkg)
-      if: runner.os == 'Windows'
-      shell: powershell
-      run: |
-        # read vcpkg toolchain from GITHUB_OUTPUT (set by vcpkg step)
-        $toolchainEntry = Get-Content Env:GITHUB_OUTPUT | Select-String -Pattern "VCPKG_TOOLCHAIN_FILE=(.*)"
-        $toolchain = $null
-        if ($toolchainEntry) {
-          $toolchain = $toolchainEntry.Matches[0].Groups[1].Value
-        }
+          # Expose toolchain file path for later steps
+          Write-Output "VCPKG_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-        $cmakeArgs = @(
-          "-B", "${{ steps.strings.outputs.build-output-dir }}",
-          "-DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}",
-          "-DCMAKE_C_COMPILER=${{ matrix.c_compiler }}",
-          "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}",
-          "-S", "${{ github.workspace }}"
-        )
+      # Optional: cache vcpkg folder to speed up subsequent runs
+      # - name: Cache vcpkg
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ${{ github.workspace }}\vcpkg
+      #     key: vcpkg-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+      #     restore-keys: |
+      #       vcpkg-${{ runner.os }}-
 
-        if ($toolchain -and (Test-Path $toolchain)) {
-          $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
-          Write-Host "Using vcpkg toolchain: $toolchain"
-        } else {
-          Write-Host "No vcpkg toolchain found, configuring without it."
-        }
+      # ---------------------------
+      # Configure CMake (Windows) using vcpkg toolchain
+      # ---------------------------
+      - name: Configure CMake (Windows + vcpkg)
+        shell: powershell
+        run: |
+          # Read vcpkg toolchain path from GITHUB_OUTPUT
+          $toolchainEntry = Get-Content Env:GITHUB_OUTPUT | Select-String -Pattern "VCPKG_TOOLCHAIN_FILE=(.*)"
+          $toolchain = $null
+          if ($toolchainEntry) {
+            $toolchain = $toolchainEntry.Matches[0].Groups[1].Value
+          }
 
-        cmake @cmakeArgs
+          # Prepare cmake args
+          $cmakeArgs = @(
+            "-B", "${{ steps.strings.outputs.build-output-dir }}",
+            "-S", "${{ github.workspace }}",
+            "-A", "x64",
+            "-DCMAKE_BUILD_TYPE=Release"
+          )
 
-    - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+          if ($toolchain -and (Test-Path $toolchain)) {
+            $cmakeArgs += ("-DCMAKE_TOOLCHAIN_FILE=$toolchain")
+            Write-Host "Using vcpkg toolchain: $toolchain"
+          } else {
+            Write-Host "No vcpkg toolchain found; configuring without it (unexpected)."
+          }
 
-    - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: ctest --build-config ${{ matrix.build_type }}
+          # Run CMake configure
+          cmake @cmakeArgs
+
+      # ---------------------------
+      # Build (multi-config, pass --config)
+      # ---------------------------
+      - name: Build
+        shell: powershell
+        run: |
+          cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config Release -- /m
+
+      # ---------------------------
+      # Test
+      # ---------------------------
+      - name: Test
+        shell: powershell
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: |
+          ctest --config Release --output-on-failure
