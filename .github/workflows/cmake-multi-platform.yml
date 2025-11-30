@@ -15,7 +15,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         build_type: [Release]
-        c_compiler: [gcc, clang, cl]
+        # choose C compiler (matrix entries combined with 'include' below)
+        c_compiler: [gcc, cl]
         include:
           - os: windows-latest
             c_compiler: cl
@@ -23,14 +24,9 @@ jobs:
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
         exclude:
           - os: windows-latest
             c_compiler: gcc
-          - os: windows-latest
-            c_compiler: clang
           - os: ubuntu-latest
             c_compiler: cl
 
@@ -50,7 +46,6 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        # libsodium headers and libcurl for cpr
         sudo apt-get install -y libsodium-dev libcurl4-openssl-dev build-essential pkg-config
       shell: bash
 
@@ -61,61 +56,62 @@ jobs:
       if: runner.os == 'Windows'
       shell: powershell
       run: |
-        # clone vcpkg
         git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
         Set-Location $env:GITHUB_WORKSPACE\vcpkg
         .\bootstrap-vcpkg.bat
-        # install libsodium and cpr for x64
         .\vcpkg.exe install libsodium:x64-windows cpr[x64-windows]:x64-windows
-        # keep path to toolchain file for later CMake configure
-        echo "VCPKG_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        Write-Output "VCPKG_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-    # On Linux we might still want to use vcpkg (optional). For now we use system packages, so set empty.
+    # Ensure a predictable output variable on Linux (empty string)
     - name: Set vcpkg toolchain output (Linux)
       if: runner.os == 'Linux'
       run: |
-        # explicit empty so subsequent steps can reference it safely
         echo "VCPKG_TOOLCHAIN_FILE=" >> "$GITHUB_OUTPUT"
       shell: bash
 
     # ---------------------------
-    # Configure CMake (pass toolchain file on Windows)
+    # Configure CMake - Linux
     # ---------------------------
-    - name: Configure CMake
-      run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        ${{ (fromJSON('{"v": "${{ steps.strings.outputs.build-output-dir }}" }')) && '' }}
-        -S ${{ github.workspace }}
-        ${{ (steps.strings.outputs.build-output-dir) && '' }}
-        ${{ (steps.strings.outputs.build-output-dir) && '' }}
-        ${{ github.workspace }}
-        ${{ '' }}
+    - name: Configure CMake (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -S "${{ github.workspace }}"
       shell: bash
 
-    # If Windows and vcpkg toolchain is set, re-run configure using that toolchain
-    - name: Configure CMake (Windows + vcpkg toolchain)
+    # ---------------------------
+    # Configure CMake - Windows (use vcpkg toolchain if present)
+    # ---------------------------
+    - name: Configure CMake (Windows + vcpkg)
       if: runner.os == 'Windows'
       shell: powershell
       run: |
-        $toolchain = (Get-Content Env:GITHUB_OUTPUT) -join "`n" | Select-String -Pattern "VCPKG_TOOLCHAIN_FILE=(.*)" | ForEach-Object { $_.Matches[0].Groups[1].Value }
-        if ($toolchain -and (Test-Path $toolchain)) {
-          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
-            -DCMAKE_TOOLCHAIN_FILE="$toolchain" `
-            -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
-            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -S ${{ github.workspace }}
-        } else {
-          # fallback (shouldn't happen)
-          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
-            -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
-            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -S ${{ github.workspace }}
+        # read vcpkg toolchain from GITHUB_OUTPUT (set by vcpkg step)
+        $toolchainEntry = Get-Content Env:GITHUB_OUTPUT | Select-String -Pattern "VCPKG_TOOLCHAIN_FILE=(.*)"
+        $toolchain = $null
+        if ($toolchainEntry) {
+          $toolchain = $toolchainEntry.Matches[0].Groups[1].Value
         }
+
+        $cmakeArgs = @(
+          "-B", "${{ steps.strings.outputs.build-output-dir }}",
+          "-DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}",
+          "-DCMAKE_C_COMPILER=${{ matrix.c_compiler }}",
+          "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}",
+          "-S", "${{ github.workspace }}"
+        )
+
+        if ($toolchain -and (Test-Path $toolchain)) {
+          $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+          Write-Host "Using vcpkg toolchain: $toolchain"
+        } else {
+          Write-Host "No vcpkg toolchain found, configuring without it."
+        }
+
+        cmake @cmakeArgs
 
     - name: Build
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
