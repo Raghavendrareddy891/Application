@@ -10,9 +10,9 @@ include_directories("C:/msys64/mingw64/include")
 link_directories("C:/msys64/mingw64/lib")
 
 add_executable(chat_client
-    main.cpp
-    crypto.cpp
-    chat_client.cpp
+    client/main.cpp
+    client/crypto.cpp
+    client/chat_client.cpp
 )
 
 # libsodium + cpr from MSYS2
