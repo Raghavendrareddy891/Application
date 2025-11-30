@@ -1,7 +1,7 @@
 set -e
 
 echo "⭐ Running build_client.sh"
-cd /d/Application/client
+cd /d/Application/
 
 mkdir -p build
 cd build
