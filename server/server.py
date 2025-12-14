@@ -157,18 +157,18 @@ def get_messages(since_id: int = 0, current_user: str = Depends(get_current_user
             continue
         out.append(
             MessageResponse(
-                # id=m.id,
-                # from_=m.from_user,
-                # to=m.to_user,
-                # ciphertext=m.ciphertext,
-                # nonce=m.nonce,
-                # timestamp=m.timestamp,
                 id=m.id,
                 from_=m.from_user,
                 to=m.to_user,
                 ciphertext=m.ciphertext,
                 nonce=m.nonce,
                 timestamp=m.timestamp,
+                # id=m.id,
+                # from_=m.from_user,
+                # to=m.to_user,
+                # ciphertext=m.ciphertext,
+                # nonce=m.nonce,
+                # timestamp=m.timestamp,
             )
         )
     return GetMessagesResponse(messages=out)
