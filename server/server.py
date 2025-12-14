@@ -87,14 +87,14 @@ def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="identity_public_key required")
     pw_hash = bcrypt.hash(req.password)
     USERS[req.username] = UserRecord(
-        # username=req.username,
-        # password_hash=pw_hash,
-        # identity_public_key=req.identity_public_key,
-        # created_at=time.time(),
         username=req.username,
         password_hash=pw_hash,
         identity_public_key=req.identity_public_key,
         created_at=time.time(),
+        # username=req.username,
+        # password_hash=pw_hash,
+        # identity_public_key=req.identity_public_key,
+        # created_at=time.time(),
     )
     return {"status": "ok", "message": "User created"}
 
@@ -130,19 +130,19 @@ def send_message(req: SendMessageRequest, current_user: str = Depends(get_curren
     ts = req.timestamp or int(time.time())
     MESSAGES.append(
         MessageRecord(
-            # id=msg_id,
-            # from_user=current_user,
-            # to_user=req.to,
-            # ciphertext=req.ciphertext,
-            # nonce=req.nonce,
-            # timestamp=ts,
             id=msg_id,
             from_user=current_user,
             to_user=req.to,
             ciphertext=req.ciphertext,
             nonce=req.nonce,
             timestamp=ts,
-        )
+        #     id=msg_id,
+        #     from_user=current_user,
+        #     to_user=req.to,
+        #     ciphertext=req.ciphertext,
+        #     nonce=req.nonce,
+        #     timestamp=ts,
+        # )
     )
     return SendMessageResponse(status="ok", message_id=msg_id)
 
@@ -157,18 +157,18 @@ def get_messages(since_id: int = 0, current_user: str = Depends(get_current_user
             continue
         out.append(
             MessageResponse(
-                # id=m.id,
-                # from_=m.from_user,
-                # to=m.to_user,
-                # ciphertext=m.ciphertext,
-                # nonce=m.nonce,
-                # timestamp=m.timestamp,
                 id=m.id,
                 from_=m.from_user,
                 to=m.to_user,
                 ciphertext=m.ciphertext,
                 nonce=m.nonce,
                 timestamp=m.timestamp,
+                # id=m.id,
+                # from_=m.from_user,
+                # to=m.to_user,
+                # ciphertext=m.ciphertext,
+                # nonce=m.nonce,
+                # timestamp=m.timestamp,
             )
         )
     return GetMessagesResponse(messages=out)
