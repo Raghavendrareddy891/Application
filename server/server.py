@@ -136,13 +136,13 @@ def send_message(req: SendMessageRequest, current_user: str = Depends(get_curren
             ciphertext=req.ciphertext,
             nonce=req.nonce,
             timestamp=ts,
-        #     id=msg_id,
-        #     from_user=current_user,
-        #     to_user=req.to,
-        #     ciphertext=req.ciphertext,
-        #     nonce=req.nonce,
-        #     timestamp=ts,
-        # )
+            # id=msg_id,
+            # from_user=current_user,
+            # to_user=req.to,
+            # ciphertext=req.ciphertext,
+            # nonce=req.nonce,
+            # timestamp=ts,
+        )
     )
     return SendMessageResponse(status="ok", message_id=msg_id)
 
