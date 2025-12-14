@@ -87,14 +87,14 @@ def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="identity_public_key required")
     pw_hash = bcrypt.hash(req.password)
     USERS[req.username] = UserRecord(
-        # username=req.username,
-        # password_hash=pw_hash,
-        # identity_public_key=req.identity_public_key,
-        # created_at=time.time(),
         username=req.username,
         password_hash=pw_hash,
         identity_public_key=req.identity_public_key,
         created_at=time.time(),
+        # username=req.username,
+        # password_hash=pw_hash,
+        # identity_public_key=req.identity_public_key,
+        # created_at=time.time(),
     )
     return {"status": "ok", "message": "User created"}
 
@@ -130,18 +130,18 @@ def send_message(req: SendMessageRequest, current_user: str = Depends(get_curren
     ts = req.timestamp or int(time.time())
     MESSAGES.append(
         MessageRecord(
-            # id=msg_id,
-            # from_user=current_user,
-            # to_user=req.to,
-            # ciphertext=req.ciphertext,
-            # nonce=req.nonce,
-            # timestamp=ts,
             id=msg_id,
             from_user=current_user,
             to_user=req.to,
             ciphertext=req.ciphertext,
             nonce=req.nonce,
             timestamp=ts,
+            # id=msg_id,
+            # from_user=current_user,
+            # to_user=req.to,
+            # ciphertext=req.ciphertext,
+            # nonce=req.nonce,
+            # timestamp=ts,
         )
     )
     return SendMessageResponse(status="ok", message_id=msg_id)
